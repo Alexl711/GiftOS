@@ -113,7 +113,8 @@ function row(i) {
       h('span', { class: 'step', style: { animationDelay: '.15s' } }, 'Photo'),
       h('span', { class: 'step', style: { animationDelay: '.3s' } }, 'Price')));
   } else {
-    if (i.source) meta.append(h('span', { class: 'src', text: i.source }));
+    if (i.source && i.url) meta.append(h('a', { class: 'src', href: i.url, target: '_blank', rel: 'noopener', title: 'Open store page' }, i.source, icon('arrowOut', 11)));
+    else if (i.source) meta.append(h('span', { class: 'src', text: i.source }));
     else meta.append(h('span', { class: 'chip accent', text: 'Idea' }));
     meta.append(h('span', { class: 'chip', text: i.category }));
     if (i.status === 'failed') meta.append(h('span', { class: 'chip warn' }, h('span', { class: 'dot' }), 'Couldn’t read page'));
@@ -138,7 +139,7 @@ function rowMenu(i, anchor) {
   const items = [{ icon: 'pencil', label: 'Edit details', run: () => openEdit(i) }];
   if (i.url) {
     items.push({ icon: 'refresh', label: 'Refresh price & photo', run: () => refreshItem(i) });
-    items.push({ icon: 'arrowOut', label: 'Open store page', run: () => open(i.url, '_blank', 'noopener') });
+    items.push({ icon: 'arrowOut', label: 'Open store page', href: i.url });
   }
   if (i.reserved && !A.surprise) items.push({ icon: 'undo', label: 'Release reservation', run: () => confirmThen('Release this reservation?', `“${i.title}” goes back on the list. ${i.reservedBy || 'The gift-giver'} won’t be notified.`, 'Release', () => release(i)) });
   items.push('-', { icon: 'trash', label: 'Remove', danger: true, run: () => confirmThen('Remove this item?', `“${i.title}” will be taken off your list.`, 'Remove', () => removeItem(i)) });
@@ -306,7 +307,7 @@ $('#shareBtn').addEventListener('click', async () => {
   } catch (err) { if (err?.name !== 'AbortError') toast(url); }
 });
 $('#moreBtn').addEventListener('click', (e) => showMenu(e.currentTarget, [
-  { icon: 'eye', label: 'View your page', run: () => open('/', '_blank', 'noopener') },
+  { icon: 'eye', label: 'View your page', href: '/' },
   { icon: 'plus', label: 'Get the bookmark button', run: () => { $('#clipLink').href = bookmarkletCode(); openDialog($('#clipDlg')); } },
   { icon: 'refresh', label: 'Reload items', run: () => refresh().then(() => toast('Up to date')) },
   '-',

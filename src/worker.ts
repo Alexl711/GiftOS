@@ -20,7 +20,7 @@
  *   DELETE /api/admin/items/:id/reserve   release a reservation
  *   PUT    /api/admin/settings
  */
-import { scrape, isHttp, hostOf, UA, tidyTitle, guessCategory, parsePrice, type Scraped } from './scrape';
+import { scrape, isHttp, hostOf, UA, tidyTitle, guessCategory, parsePrice, cleanUrl, type Scraped } from './scrape';
 import { STATIC } from './static.generated';
 
 export interface Env {
@@ -147,7 +147,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
     if (p === '/api/admin/links' && m === 'POST') {
       const body = await readJson(req);
       const found: string[] = String(body.text || '').match(/https?:\/\/[^\s"'<>]+/g) || [];
-      const urls = [...new Set(found.map((u) => u.replace(/[),.;]+$/, '')))].filter(isHttp);
+      const urls = [...new Set(found.map((u) => cleanUrl(u.replace(/[),.;]+$/, ''))))].filter(isHttp);
       if (!urls.length) throw new HttpError(400, 'No links found. Paste a full link starting with https://');
       if (urls.length > MAX_LINKS) throw new HttpError(400, `That’s ${urls.length} links. Paste up to ${MAX_LINKS} at a time.`);
 
@@ -171,7 +171,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
     // From the "Add to wishlist" bookmark: details read in the owner's own browser on the store page.
     if (p === '/api/admin/clip' && m === 'POST') {
       const b = await readJson(req);
-      const link = String(b.url || '').trim();
+      const link = cleanUrl(String(b.url || '').trim());
       if (!isHttp(link)) throw new HttpError(400, 'That page has no link to save.');
       const dupe = (await env.DB.prepare('SELECT id, url FROM items WHERE url IS NOT NULL').all<{ id: string; url: string }>())
         .results.find((r) => dedupeKey(r.url) === dedupeKey(link));
@@ -371,7 +371,7 @@ type Fields = {
 };
 
 function sanitize(b: Record<string, unknown>): Fields {
-  const url = isHttp(String(b.url || '').trim()) ? String(b.url).trim().slice(0, 2000) : null;
+  const url = isHttp(String(b.url || '').trim()) ? cleanUrl(String(b.url).trim()).slice(0, 2000) : null;
   const image = isHttp(String(b.image || '').trim()) ? String(b.image).trim().slice(0, 2000) : null;
   const priceNum = b.price === '' || b.price == null ? NaN : Number(b.price);
   const cur = String(b.currency || 'USD').trim().toUpperCase();

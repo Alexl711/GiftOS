@@ -230,6 +230,18 @@ async function microlinkOnce(url: string): Promise<Partial> {
 
 export const isHttp = (s: string) => /^https?:\/\/[^\s]+$/i.test(s);
 
+/** Removes ad/tracking parameters (utm_*, gclid, …) from a store link; keeps real ones like size or color. */
+export function cleanUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    for (const k of [...u.searchParams.keys()]) {
+      if (/^(utm_|gad_|tw_|_su_|mc_|pk_|hsa_|ref_?$|cid$|icid|gclid|gbraid|wbraid|gclsrc|dclid|fbclid|msclkid|yclid|igshid|srsltid|campaign|cmpid|extStoreId|loc$|social_share|channelId|psc$|th$|lv$|plpRedirect)/i.test(k)) u.searchParams.delete(k);
+    }
+    u.hash = '';
+    return u.href.replace(/\?$/, '');
+  } catch { return url; }
+}
+
 export function hostOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }

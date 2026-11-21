@@ -112,7 +112,10 @@ function closeMenu() {
 function showMenu(anchor, items) {
   closeMenu();
   const m = h('div', { class: 'menu', role: 'menu' }, items.map((it) => it === '-' ? h('hr') :
-    h('button', { type: 'button', role: 'menuitem', class: it.danger ? 'danger' : '', onclick: () => { closeMenu(); it.run(); } }, icon(it.icon, 16), it.label)));
+    it.href
+      // Real links, so Safari and other browsers open them as normal links.
+      ? h('a', { href: it.href, target: '_blank', rel: 'noopener', role: 'menuitem', onclick: () => setTimeout(closeMenu, 0) }, icon(it.icon, 16), it.label)
+      : h('button', { type: 'button', role: 'menuitem', class: it.danger ? 'danger' : '', onclick: () => { closeMenu(); it.run(); } }, icon(it.icon, 16), it.label)));
   document.body.append(m);
   const r = anchor.getBoundingClientRect();
   const mw = m.offsetWidth, mh = m.offsetHeight;
