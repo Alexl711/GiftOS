@@ -4,43 +4,41 @@
 const S = { settings: {}, items: [], query: '', budget: store.get('giftos_budget', 'low'), loaded: false };
 const BUDGETS = { low: [0, 50], mid: [50, 150], high: [150, Infinity] };
 
-/* ───── Secret Santa budget ───── */
-// "Give or take": items up to 15% over the budget still count.
-const budgetAmount = () => { const n = Number(S.settings.budget); return n > 0 ? n : null; };
-const budgetLimit = () => budgetAmount() && budgetAmount() * 1.15;
-const budgetKey = () => 'giftos_budgetmode_' + budgetAmount();
-const budgetMode = () => (budgetAmount() ? store.get(budgetKey(), null) : null);
-const fitsBudget = (i) => i.price == null || i.price <= budgetLimit();
+/* ───── Secret Santa budget ─────
+   The server only says whether a budget is on and which items fit it ("give or take" included);
+   the amount itself is never shown or sent. */
+const budgetOn = () => !!S.settings.budget_on;
+const budgetKey = () => 'giftos_budgetmode_v2';
+const budgetMode = () => (budgetOn() ? store.get(budgetKey(), null) : null);
+const fitsBudget = (i) => i.inBudget !== false;
 function budgetMessage() {
-  const b = budgetAmount();
   return (S.settings.budget_note || '').trim() ||
-    `Our gift budget is about $${b}, give or take. Some things on here cost more because this is my everyday wishlist too, so please skip those. Anything around the budget would make my day!`;
+    'Some things on here are pricier because this is my everyday wishlist too, so feel free to skip those. Anything that fits our Secret Santa budget would make my day!';
 }
 function maybeShowBudgetPopup() {
-  if (!budgetAmount() || budgetMode()) return;
+  if (!budgetOn() || budgetMode()) return;
   $('#budgetMsg').textContent = budgetMessage();
-  $('#budgetOnly').textContent = `Show gifts around $${budgetAmount()}`;
+  $('#budgetOnly').textContent = 'Show gifts in our budget';
   setTimeout(() => openDialog($('#budgetDlg')), 600);
 }
 function setBudgetMode(mode) {
   store.set(budgetKey(), mode);
   closeDialog($('#budgetDlg'));
   renderSections();
-  if (mode === 'budget') toast(`Showing gifts up to about $${budgetAmount()}`, 'ok');
+  if (mode === 'budget') toast('Showing gifts in our budget', 'ok');
 }
 function budgetBanner(hidden) {
-  const b = budgetAmount();
-  if (!b) return null;
+  if (!budgetOn()) return null;
   if (budgetMode() === 'budget') {
     return h('div', { class: 'budget-banner reveal' },
       h('span', { class: 'bb-ic' }, icon('gift', 16)),
-      h('span', { class: 'bb-text' }, h('b', { text: `Gifts around $${b}` }), hidden ? ` · ${hidden} pricier item${hidden === 1 ? '' : 's'} hidden` : ''),
+      h('span', { class: 'bb-text' }, h('b', { text: 'Gifts in our budget' }), hidden ? ` · ${hidden} pricier item${hidden === 1 ? '' : 's'} hidden` : ''),
       h('button', { class: 'btn ghost sm', type: 'button', onclick: () => setBudgetMode('all') }, 'See everything'));
   }
   return h('div', { class: 'budget-banner soft reveal' },
     h('span', { class: 'bb-ic' }, icon('gift', 16)),
-    h('span', { class: 'bb-text' }, h('b', { text: 'Secret Santa?' }), ` The budget is about $${b}.`),
-    h('button', { class: 'btn ghost sm', type: 'button', onclick: () => setBudgetMode('budget') }, `Only show ~$${b}`));
+    h('span', { class: 'bb-text' }, h('b', { text: 'Secret Santa?' }), ' Some items are above our budget.'),
+    h('button', { class: 'btn ghost sm', type: 'button', onclick: () => setBudgetMode('budget') }, 'Show in-budget gifts'));
 }
 
 const mine = () => store.get('giftos_reservations', {});
