@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gift OS</title>
+<meta name="description" content="A wishlist for the people who want to get you something.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Gift OS">
+<meta property="og:description" content="A wishlist for the people who want to get you something.">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top">Gift<em> OS</em></a>
+    <nav class="nav-links" id="navLinks" aria-label="Categories"></nav>
+    <div class="nav-right">
+      <button class="nav-cta owner-only" id="navShare" type="button">Share list</button>
+      <button class="lock-btn" id="lockBtn" type="button" title="Owner sign-in" aria-label="Owner sign-in">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <p class="eyebrow" id="hTitle">&nbsp;</p>
+    <h1 id="hHeadline">&nbsp;</h1>
+    <p class="sub viewer-only" id="hSub"></p>
+    <p class="sub owner-only">Owner mode is on. Add, edit, star and remove anything.</p>
+    <div class="stats" aria-live="polite">
+      <div class="stat"><b id="stItems">0</b><span>items</span></div>
+      <div class="stat hide-surprise"><b id="stOpen">0</b><span>still available</span></div>
+      <div class="stat"><b id="stValue">$0</b><span>total value</span></div>
+    </div>
+  </section>
+
+  <section class="addbar owner-only" aria-label="Add items">
+    <form class="addbar-row" id="addForm">
+      <input id="urlInput" type="url" inputmode="url" placeholder="Paste a product link…" aria-label="Product link" required>
+      <button class="btn" id="addBtn" type="submit">Add</button>
+    </form>
+    <div class="addbar-links">
+      <button type="button" class="linkish" id="bulkBtn">Paste many links</button>
+      <button type="button" class="linkish" id="manualBtn">Add without a link</button>
+      <button type="button" class="linkish" id="settingsBtn">Edit list title</button>
+      <label class="switch" title="Hide what people have reserved, so gifts stay a surprise">
+        <input type="checkbox" id="surpriseToggle"> <span>Surprise mode</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="toolbar" aria-label="Filters">
+    <div class="chips" id="chips"></div>
+    <div class="tool-row">
+      <input class="search" id="search" type="search" placeholder="Search the list" aria-label="Search items">
+      <select class="sort" id="sort" aria-label="Sort items">
+        <option value="star">Most wanted first</option>
+        <option value="new">Newest first</option>
+        <option value="open">Available first</option>
+        <option value="hi">Price: high to low</option>
+        <option value="lo">Price: low to high</option>
+        <option value="az">A to Z</option>
+      </select>
+    </div>
+  </section>
+
+  <section class="grid" id="grid" aria-live="polite">
+    <div class="card skel"></div><div class="card skel"></div><div class="card skel"></div>
+  </section>
+</main>
+
+<footer>
+  <div class="frow">
+    <a href="#top">Back to top</a>
+    <button type="button" id="refreshBtn">Refresh list</button>
+    <button type="button" id="signOutBtn" class="owner-only">Sign out</button>
+  </div>
+  <span>&copy; <span id="yr"></span> Gift OS</span>
+</footer>
+
+<!-- Owner sign-in -->
+<dialog id="loginModal" aria-labelledby="loginH">
+  <form class="sheet" id="loginForm">
+    <h2 id="loginH">Owner sign-in</h2>
+    <div class="field">
+      <label for="pwInput">Password</label>
+      <input id="pwInput" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn" type="submit" id="loginGo">Unlock</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Add / edit item -->
+<dialog id="editModal" aria-labelledby="editH">
+  <form class="sheet" id="editForm">
+    <h2 id="editH">Edit item</h2>
+    <div class="field"><label for="eTitle">Title</label><input id="eTitle" name="title" type="text" maxlength="200" required></div>
+    <div class="field"><label for="eUrl">Product link</label><input id="eUrl" name="url" type="url" placeholder="https://…"></div>
+    <div class="field"><label for="eImage">Image link</label><input id="eImage" name="image" type="url" placeholder="https://…"></div>
+    <div class="field-row">
+      <div class="field"><label for="ePrice">Price</label><input id="ePrice" name="price" type="number" step="0.01" min="0" inputmode="decimal"></div>
+      <div class="field small"><label for="eCurrency">Currency</label><input id="eCurrency" name="currency" type="text" maxlength="3" placeholder="USD"></div>
+    </div>
+    <div class="field"><label for="eCategory">Category</label><input id="eCategory" name="category" type="text" maxlength="40" list="catList"><datalist id="catList"></datalist></div>
+    <div class="field"><label for="eNotes">Notes for gift-givers</label><textarea id="eNotes" name="notes" rows="2" maxlength="500" placeholder="Size 10.5, black, any color but red…"></textarea></div>
+    <label class="check"><input id="eStar" name="starred" type="checkbox"> Most wanted (pins it to the top)</label>
+    <p class="reserved-line" id="eReserved" hidden></p>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn" type="submit" id="editSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Bulk add -->
+<dialog id="bulkModal" aria-labelledby="bulkH">
+  <form class="sheet" id="bulkForm">
+    <h2 id="bulkH">Paste many links</h2>
+    <p class="hint">Paste links from anywhere, like notes, texts or a spreadsheet column. Up to 30 at a time. Duplicates are skipped.</p>
+    <div class="field"><textarea id="bulkText" rows="7" placeholder="https://…&#10;https://…" required></textarea></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn" type="submit" id="bulkGo">Import</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- List settings -->
+<dialog id="settingsModal" aria-labelledby="setH">
+  <form class="sheet" id="settingsForm">
+    <h2 id="setH">List title</h2>
+    <div class="field"><label for="sTitle">Name</label><input id="sTitle" type="text" maxlength="80" placeholder="Alex’s Wishlist"></div>
+    <div class="field"><label for="sHeadline">Headline</label><input id="sHeadline" type="text" maxlength="80"></div>
+    <div class="field"><label for="sSub">Message to gift-givers</label><textarea id="sSub" rows="3" maxlength="300"></textarea></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn" type="submit" id="settingsSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Reserve -->
+<dialog id="reserveModal" aria-labelledby="reserveH">
+  <form class="sheet" id="reserveForm">
+    <h2 id="reserveH">Reserve this gift</h2>
+    <p class="hint">This marks it as taken so nobody buys a duplicate. Your name is never shown to other gift-givers.</p>
+    <div class="field"><label for="rName">Your name</label><input id="rName" type="text" placeholder="e.g., Uncle Mike" maxlength="60" autocomplete="name"></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn" type="submit" id="reserveGo">Reserve it</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="lightbox" class="lightbox" aria-label="Image preview"><img id="lightboxImg" alt=""></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
