@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin · Gift OS</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;550;600&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/admin.css">
+<script>try{var t=JSON.parse(localStorage.getItem('giftos_theme')||'"system"');document.documentElement.dataset.theme=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'}catch(e){}</script>
+<script src="/js/common.js" defer></script>
+<script src="/js/admin.js" defer></script>
+</head>
+<body>
+
+<!-- Sign-in -->
+<section class="login" id="login" hidden>
+  <div class="dots" aria-hidden="true"></div>
+  <form class="login-card" id="loginForm">
+    <div class="login-mark" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10.5" rx="1.5"/><rect x="3" y="7" width="18" height="3.5" rx="1"/><path d="M12 7v13.5M12 7c-1.6-3.5-6-3.6-5.2-.6.4 1.4 3 1.4 5.2.6zM12 7c1.6-3.5 6-3.6 5.2-.6-.4 1.4-3 1.4-5.2.6z"/></svg>
+    </div>
+    <h1>Welcome back</h1>
+    <p>Sign in to manage your wishlist.</p>
+    <label class="field"><span class="sr">Password</span><input class="input" id="pw" type="password" autocomplete="current-password" placeholder="Password" required></label>
+    <button class="btn accent lg" type="submit" id="loginGo" style="width:100%">Sign in</button>
+    <a class="back" href="/">← Back to the wishlist</a>
+  </form>
+</section>
+
+<!-- App -->
+<div class="app" id="app" hidden>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="/admin"><span class="logo-mark" id="logoMark">G</span><span>Gift OS</span><span class="chip">Admin</span></a>
+      <div class="top-actions" id="topActions">
+        <a class="btn ghost sm hide-sm" href="/" target="_blank" rel="noopener">View page <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M8 7h9v9"/></svg></a>
+        <button class="btn accent sm" type="button" id="shareBtn">Share link</button>
+        <button class="icon-btn" type="button" id="moreBtn" aria-label="More options"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="composer">
+      <div class="dots" aria-hidden="true"></div>
+      <h1 class="reveal">What’s on your list?</h1>
+      <p class="reveal">Paste links from any store. Photos and prices are pulled in for you in the background.</p>
+      <form class="prompt reveal" id="linkForm">
+        <div class="prompt-box">
+          <label for="links" class="sr">Product links</label>
+          <textarea id="links" rows="1" placeholder="Paste a product link, or several at once…" autocomplete="off" spellcheck="false"></textarea>
+          <div class="prompt-foot">
+            <button type="button" class="btn soft sm" id="ideaBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Idea without a link</button>
+            <span class="hint" id="linkHint"></span>
+            <button type="submit" class="send" id="sendBtn" disabled aria-label="Add links"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/></svg></button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <div class="layout">
+      <section class="panel list-panel" aria-labelledby="listH">
+        <div class="tiles">
+          <div class="tile-stat"><span>Items</span><b id="stItems">0</b></div>
+          <div class="tile-stat"><span>Reserved</span><b id="stReserved">0</b></div>
+          <div class="tile-stat"><span>Total value</span><b id="stValue">$0</b></div>
+          <div class="tile-stat"><span>Needs a look</span><b id="stAttn">0</b></div>
+        </div>
+        <div class="list-head">
+          <h2 id="listH">Your items</h2>
+          <div class="seg" id="filterSeg" role="group" aria-label="Filter items">
+            <button type="button" data-v="all">All</button>
+            <button type="button" data-v="attn">Needs a look</button>
+            <button type="button" data-v="reserved">Reserved</button>
+          </div>
+        </div>
+        <div class="rows" id="rows" aria-live="polite"></div>
+      </section>
+
+      <aside class="panel settings" aria-labelledby="setH">
+        <h2 id="setH">Your page</h2>
+        <form id="settingsForm">
+          <label class="field"><span>Your first name</span><input class="input" id="sName" maxlength="40" placeholder="Alex"></label>
+          <label class="field"><span>Page title</span><input class="input" id="sTitle" maxlength="80" placeholder="Alex’s Wishlist"></label>
+          <label class="field"><span>Tagline</span><input class="input" id="sTagline" maxlength="120"></label>
+          <label class="field"><span>Message to gift-givers</span><textarea class="input" id="sMessage" rows="3" maxlength="400"></textarea></label>
+          <div class="row">
+            <label class="field"><span>Occasion</span><input class="input" id="sEvent" maxlength="40" placeholder="Birthday"></label>
+            <label class="field"><span>Date</span><input class="input" id="sDate" type="date"></label>
+          </div>
+          <div class="field"><span>Make it yours</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Accent color"></div></div>
+          <label class="switch-row">
+            <span><b>Surprise mode</b><small>Hide who reserved what from you.</small></span>
+            <input type="checkbox" id="surprise" role="switch"><span class="switch" aria-hidden="true"></span>
+          </label>
+          <button class="btn" type="submit" id="saveSettings" style="width:100%;margin-top:6px">Save changes</button>
+        </form>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<!-- Edit item -->
+<dialog id="editDlg" aria-labelledby="editH">
+  <form class="card-sheet" id="editForm">
+    <div class="sheet-head">
+      <h2 id="editH">Edit item</h2>
+      <button type="button" class="x" data-close aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="edit-preview" id="editPreview"></div>
+    <label class="field"><span>Title</span><input class="input" id="eTitle" maxlength="200" required></label>
+    <label class="field" id="eUrlField"><span>Product link</span><input class="input" id="eUrl" type="url" placeholder="https://…"></label>
+    <label class="field" id="eImageField"><span>Photo link</span><input class="input" id="eImage" type="url" placeholder="https://… (leave blank to keep the one found)"></label>
+    <div class="row">
+      <label class="field"><span>Price</span><input class="input" id="ePrice" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Optional"></label>
+      <label class="field" style="flex:0 0 92px"><span>Currency</span><input class="input" id="eCurrency" maxlength="3" placeholder="USD"></label>
+    </div>
+    <label class="field"><span>Section</span><input class="input" id="eCategory" maxlength="40" list="catList" placeholder="e.g., Tech"><datalist id="catList"></datalist></label>
+    <label class="field"><span>Note for gift-givers</span><textarea class="input" id="eNotes" rows="2" maxlength="500" placeholder="Size 10.5, black"></textarea></label>
+    <label class="check"><input type="checkbox" id="eStar"> Most wanted (featured at the top)</label>
+    <div class="sheet-actions">
+      <button class="btn danger sm" type="button" id="eDelete">Remove</button>
+      <span class="grow"></span>
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn accent" type="submit" id="eSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Confirm -->
+<dialog id="confirmDlg" aria-labelledby="confirmH">
+  <div class="card-sheet">
+    <div class="sheet-head"><h2 id="confirmH">Are you sure?</h2></div>
+    <p class="sheet-sub" id="confirmText"></p>
+    <div class="sheet-actions">
+      <span class="grow"></span>
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn danger" type="button" id="confirmGo">Confirm</button>
+    </div>
+  </div>
+</dialog>
+</body>
+</html>
