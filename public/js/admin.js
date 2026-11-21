@@ -95,7 +95,14 @@ function row(i) {
   const pendingNow = i.status === 'pending';
   const thumb = h('div', { class: 'thumb' + (pendingNow ? ' loading' : '') + (!i.url ? ' idea' : '') });
   if (!pendingNow) {
-    if (i.image) { const img = h('img', { src: i.image, alt: '' }); img.addEventListener('error', () => img.replaceWith(icon('gift', 22)), { once: true }); thumb.append(img); }
+    if (i.image) {
+      const img = h('img', { src: i.image, alt: '' });
+      img.addEventListener('error', function onErr() {
+        if (i.rawImage && img.src !== i.rawImage) { img.referrerPolicy = 'no-referrer'; img.src = i.rawImage; return; }
+        img.removeEventListener('error', onErr); img.replaceWith(icon('gift', 22));
+      });
+      thumb.append(img);
+    }
     else thumb.append(icon(i.url ? 'gift' : 'bulb', 22));
   }
 
@@ -343,9 +350,10 @@ async function handleClip() {
   let data;
   try { data = JSON.parse(decodeURIComponent(m[1])); } catch { toast('That bookmark didn’t send anything readable', 'err'); return; }
   try {
-    const { item } = await api('/api/admin/clip', { method: 'POST', body: data });
+    const { item, updated } = await api('/api/admin/clip', { method: 'POST', body: data });
     patchLocal(item); if (item.status === 'pending') startPolling();
-    toast(`Added “${item.title.length > 40 ? item.title.slice(0, 38) + '…' : item.title}”`, 'ok');
+    const name = item.title.length > 40 ? item.title.slice(0, 38) + '…' : item.title;
+    toast(updated ? `Updated “${name}” with the store’s photo and price` : `Added “${name}”`, 'ok');
   } catch (err) { toast(err.message, err.status === 409 ? undefined : 'err'); }
 }
 

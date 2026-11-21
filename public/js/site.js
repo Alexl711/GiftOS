@@ -154,7 +154,12 @@ function card(i, variant) {
   const tile = h('a', { class: 'tile' + (i.image ? '' : ' empty'), href: i.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `${i.title} at ${i.source || 'the store'}` });
   if (i.image) {
     const img = h('img', { src: i.image, alt: '', loading: 'lazy', decoding: 'async' });
-    img.addEventListener('error', () => { tile.classList.add('empty'); img.replaceWith(icon('gift', 44, 'class="ph" stroke-width="1.2"')); }, { once: true });
+    // If our image relay is refused, let the browser load the store's photo directly.
+    img.addEventListener('error', function onErr() {
+      if (i.imageDirect && img.src !== i.imageDirect) { img.referrerPolicy = 'no-referrer'; img.src = i.imageDirect; return; }
+      img.removeEventListener('error', onErr);
+      tile.classList.add('empty'); img.replaceWith(icon('gift', 44, 'class="ph" stroke-width="1.2"'));
+    });
     tile.append(img);
   } else tile.append(icon('gift', 44, 'class="ph" stroke-width="1.2"'));
   tile.append(h('span', { class: 'go' }, 'View at store', icon('arrowOut', 13)));
@@ -195,7 +200,9 @@ function actionFor(i, isMine) {
 let pending = null, pendingBtn = null;
 function askReserve(i, btn) {
   pending = i; pendingBtn = btn;
-  const thumb = h('div', { class: 'thumb' }, i.image ? h('img', { src: i.image, alt: '' }) : icon('gift', 22));
+  const tImg = i.image ? h('img', { src: i.image, alt: '' }) : null;
+  if (tImg && i.imageDirect) tImg.addEventListener('error', () => { if (tImg.src !== i.imageDirect) { tImg.referrerPolicy = 'no-referrer'; tImg.src = i.imageDirect; } }, { once: true });
+  const thumb = h('div', { class: 'thumb' }, tImg || icon('gift', 22));
   $('#reserveItem').replaceChildren(thumb, h('div', { style: { minWidth: '0' } }, h('b', { text: i.title }), h('span', { text: [i.price != null ? fmtPrice(i.price, i.currency) : null, i.source].filter(Boolean).join(' · ') })));
   $('#rName').value = store.get('giftos_name', '');
   openDialog($('#reserveDlg'));

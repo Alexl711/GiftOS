@@ -173,9 +173,16 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
       const b = await readJson(req);
       const link = String(b.url || '').trim();
       if (!isHttp(link)) throw new HttpError(400, 'That page has no link to save.');
-      const dupe = (await env.DB.prepare('SELECT url FROM items WHERE url IS NOT NULL').all<{ url: string }>())
-        .results.some((r) => dedupeKey(r.url) === dedupeKey(link));
-      if (dupe) throw new HttpError(409, 'That’s already on your list.');
+      const dupe = (await env.DB.prepare('SELECT id, url FROM items WHERE url IS NOT NULL').all<{ id: string; url: string }>())
+        .results.find((r) => dedupeKey(r.url) === dedupeKey(link));
+      if (dupe) {
+        // Already on the list: fill in a missing photo or price, never overwrite what's there.
+        const img = isHttp(String(b.image || '').trim()) ? String(b.image).trim().slice(0, 2000) : null;
+        const pr = parsePrice(b.price) ?? null;
+        await env.DB.prepare(`UPDATE items SET image=COALESCE(image, ?), price=COALESCE(price, ?), status='ready', updated_at=? WHERE id=?`)
+          .bind(img, pr, Date.now(), dupe.id).run();
+        return json({ item: ownerItem((await getRow(env, dupe.id))!), updated: true });
+      }
       const title = tidyTitle(String(b.title || '')) || hostOf(link);
       const f = sanitize({ title, url: link, image: b.image, price: parsePrice(b.price) ?? '', currency: b.currency, category: guessCategory(`${title} ${link}`) });
       const complete = !!(f.image && f.price != null);
@@ -343,7 +350,7 @@ const imgPath = (r: Row) => (r.image ? `/api/img/${r.id}?v=${hash(r.image)}` : n
 /** What visitors see. Who reserved something is never sent to the public. */
 function publicItem(r: Row) {
   return {
-    id: r.id, title: r.title, url: r.url, source: r.source, category: r.category, image: imgPath(r),
+    id: r.id, title: r.title, url: r.url, source: r.source, category: r.category, image: imgPath(r), imageDirect: r.image,
     price: r.price, currency: r.currency, notes: r.notes, starred: !!r.starred, createdAt: r.created_at,
     reserved: r.reserved_at != null,
   };
