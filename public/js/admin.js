@@ -9,6 +9,7 @@ async function boot() {
   try {
     await refresh();
     showApp();
+    handleClip();
   } catch (e) {
     if (e.status === 401) showLogin(); else { showLogin(); toast(e.message, 'err'); }
   }
@@ -23,7 +24,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
   try {
     await api('/api/login', { method: 'POST', body: { password: $('#pw').value } });
     $('#pw').value = '';
-    await refresh(); showApp();
+    await refresh(); showApp(); handleClip();
   } catch (err) {
     const card = $('#loginForm'); card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
     toast(err.message, 'err'); $('#pw').select();
@@ -299,10 +300,54 @@ $('#shareBtn').addEventListener('click', async () => {
 });
 $('#moreBtn').addEventListener('click', (e) => showMenu(e.currentTarget, [
   { icon: 'eye', label: 'View your page', run: () => open('/', '_blank', 'noopener') },
+  { icon: 'plus', label: 'Get the bookmark button', run: () => { $('#clipLink').href = bookmarkletCode(); openDialog($('#clipDlg')); } },
   { icon: 'refresh', label: 'Reload items', run: () => refresh().then(() => toast('Up to date')) },
   '-',
   { icon: 'lock', label: 'Sign out', run: signOut },
 ]));
+
+/* ───── Bookmark button ("Add to wishlist") ─────
+   Runs on the store page in the owner's browser, reads the product details that page already shows,
+   and opens /admin with them. Nothing is sent anywhere else. */
+function bookmarkletCode() {
+  const src = `(function(){
+    var q=function(s){return document.querySelector(s)};
+    var m=function(n){var e=q('meta[property="'+n+'"],meta[name="'+n+'"],meta[itemprop="'+n+'"]');return e?e.getAttribute('content'):''};
+    var d={url:(q('link[rel=canonical]')||{}).href||location.href.split('#')[0],title:m('og:title')||document.title,
+      image:m('og:image')||m('twitter:image'),price:m('product:price:amount')||m('og:price:amount')||m('price'),
+      currency:m('product:price:currency')||m('og:price:currency')||''};
+    var find=function(o,k){if(!o||typeof o!=='object'||k>6)return null;if(Array.isArray(o)){for(var i=0;i<o.length;i++){var r=find(o[i],k+1);if(r)return r}return null}
+      var t=o['@type'];if(t==='Product'||t==='ProductGroup'||(Array.isArray(t)&&t.indexOf('Product')>-1))return o;
+      return find(o['@graph'],k+1)||find(o.mainEntity,k+1)};
+    document.querySelectorAll('script[type="application/ld+json"]').forEach(function(s){try{var p=find(JSON.parse(s.textContent),0);if(!p)return;
+      if(p.name)d.title=p.name;var im=p.image;im=Array.isArray(im)?im[0]:im;im=im&&im.url||im;if(typeof im==='string'&&!d.image)d.image=im;
+      var of=p.offers;of=Array.isArray(of)?of[0]:of;if(of&&!d.price){d.price=of.price||of.lowPrice||'';d.currency=of.priceCurrency||d.currency}}catch(e){}});
+    var li=q('#landingImage');if(li&&!d.image)d.image=li.getAttribute('data-old-hires')||li.src;
+    var ap=q('.a-price .a-offscreen,#corePrice_feature_div .a-offscreen');if(ap&&!d.price)d.price=ap.textContent;
+    if(d.image)try{d.image=new URL(d.image,location.href).href}catch(e){}
+    window.open('${location.origin}/admin#clip='+encodeURIComponent(JSON.stringify(d)),'_blank');
+  })()`;
+  return 'javascript:' + src.replace(/\n\s*/g, '');
+}
+$('#clipBtn').addEventListener('click', () => { $('#clipLink').href = bookmarkletCode(); openDialog($('#clipDlg')); });
+$('#clipLink').addEventListener('click', (e) => { e.preventDefault(); toast('Drag it to your bookmarks bar instead of clicking'); });
+$('#clipCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(bookmarkletCode()); toast('Copied. Paste it as the bookmark’s address', 'ok'); }
+  catch { toast('Couldn’t copy. Long-press the button above and copy its link instead', 'err'); }
+});
+
+async function handleClip() {
+  const m = location.hash.match(/^#clip=(.+)$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname);
+  let data;
+  try { data = JSON.parse(decodeURIComponent(m[1])); } catch { toast('That bookmark didn’t send anything readable', 'err'); return; }
+  try {
+    const { item } = await api('/api/admin/clip', { method: 'POST', body: data });
+    patchLocal(item); if (item.status === 'pending') startPolling();
+    toast(`Added “${item.title.length > 40 ? item.title.slice(0, 38) + '…' : item.title}”`, 'ok');
+  } catch (err) { toast(err.message, err.status === 409 ? undefined : 'err'); }
+}
 
 /* ───── Filters, theme ───── */
 const setFilter = segmented($('#filterSeg'), A.filter, (v) => { A.filter = v; renderRows(); });

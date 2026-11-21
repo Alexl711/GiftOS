@@ -20,11 +20,11 @@
  *   DELETE /api/admin/items/:id/reserve   release a reservation
  *   PUT    /api/admin/settings
  */
-import { scrape, isHttp, hostOf, UA, type Scraped } from './scrape';
+import { scrape, isHttp, hostOf, UA, tidyTitle, guessCategory, parsePrice, type Scraped } from './scrape';
+import { STATIC } from './static.generated';
 
 export interface Env {
   DB: D1Database;
-  ASSETS: Fetcher;
   OWNER_PASSWORD: string;
 }
 
@@ -40,7 +40,6 @@ const SESSION_DAYS = 30;
 const MAX_LOGIN_FAILS = 8;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LINKS = 30;
-const STALE_PENDING_MS = 2 * 60 * 1000;
 
 export const ACCENTS: Record<string, string> = {
   blue: '#0a6cff', violet: '#7c5cff', pink: '#e0407b', red: '#e5484d', orange: '#f76b15', green: '#18a058',
@@ -70,10 +69,15 @@ const json = (data: unknown, status = 200, headers: Record<string, string> = {})
 /* ───────────────────────── Entry ───────────────────────── */
 
 export default {
+  // Every minute: finish any links still waiting to be read (e.g. a background job that ran out of time).
+  async scheduled(_ev: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(processPending(env, 6));
+  },
+
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
-    if (url.pathname === '/') return renderIndex(req, env);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+    if (url.pathname === '/' || url.pathname === '/index.html') return renderIndex(env);
+    if (!url.pathname.startsWith('/api/')) return serveStatic(req, url);
     try {
       return await route(req, env, ctx, url);
     } catch (e) {
@@ -135,10 +139,6 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
     if (!(await isOwner(req, env))) throw new HttpError(401, 'Please sign in.');
 
     if (p === '/api/admin/state' && m === 'GET') {
-      // Anything stuck in "pending" (e.g. the background job was cut off) is re-queued.
-      const stale = await env.DB.prepare("SELECT id, url FROM items WHERE status='pending' AND updated_at < ?")
-        .bind(Date.now() - STALE_PENDING_MS).all<{ id: string; url: string }>();
-      for (const s of stale.results) { await touch(env, s.id); ctx.waitUntil(readLink(env, s.id, s.url, 'new')); }
       const { results } = await env.DB.prepare('SELECT * FROM items ORDER BY created_at DESC').all<Row>();
       return json({ settings: await getSettings(env), items: results.map(ownerItem), accents: ACCENTS });
     }
@@ -159,11 +159,33 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
         await env.DB.batch(rows.map((r) => env.DB.prepare(
           `INSERT INTO items (id, status, title, url, source, created_at, updated_at) VALUES (?, 'pending', ?, ?, ?, ?, ?)`,
         ).bind(r.id, hostOf(r.url), r.url, hostOf(r.url), r.created, r.created)));
-        // Read every page after responding; the admin page polls for results.
-        ctx.waitUntil(Promise.allSettled(rows.map((r) => readLink(env, r.id, r.url, 'new'))));
+        // Read the first few right after responding (Cloudflare allows ~30s of background work);
+        // the per-minute job picks up the rest. The admin page polls for results.
+        ctx.waitUntil(Promise.allSettled(rows.slice(0, 3).map((r) => readLink(env, r.id, r.url, 'new'))));
       }
       const created = await Promise.all(rows.map((r) => getRow(env, r.id)));
       return json({ items: created.filter(Boolean).map((r) => ownerItem(r!)), skipped: urls.length - fresh.length }, 202);
+    }
+
+    // From the "Add to wishlist" bookmark: details read in the owner's own browser on the store page.
+    if (p === '/api/admin/clip' && m === 'POST') {
+      const b = await readJson(req);
+      const link = String(b.url || '').trim();
+      if (!isHttp(link)) throw new HttpError(400, 'That page has no link to save.');
+      const dupe = (await env.DB.prepare('SELECT url FROM items WHERE url IS NOT NULL').all<{ url: string }>())
+        .results.some((r) => dedupeKey(r.url) === dedupeKey(link));
+      if (dupe) throw new HttpError(409, 'That’s already on your list.');
+      const title = tidyTitle(String(b.title || '')) || hostOf(link);
+      const f = sanitize({ title, url: link, image: b.image, price: parsePrice(b.price) ?? '', currency: b.currency, category: guessCategory(`${title} ${link}`) });
+      const complete = !!(f.image && f.price != null);
+      const id = crypto.randomUUID();
+      const now = Date.now();
+      await env.DB.prepare(
+        `INSERT INTO items (id, status, title, url, source, category, image, price, currency, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(id, complete ? 'ready' : 'pending', f.title, f.url, f.source, f.category, f.image, f.price, f.currency, now, now).run();
+      if (!complete) ctx.waitUntil(readLink(env, id, link, 'fill'));
+      return json({ item: ownerItem((await getRow(env, id))!) }, 201);
     }
 
     if (p === '/api/admin/items' && m === 'POST') {
@@ -227,7 +249,23 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
 
 /* ───────────────────────── Background link reading ───────────────────────── */
 
-async function readLink(env: Env, id: string, url: string, mode: 'new' | 'refresh') {
+/** Claims pending items that nobody is working on (untouched for 45s) and reads them, two at a time. */
+async function processPending(env: Env, limit: number) {
+  const cutoff = Date.now() - 45_000;
+  const { results } = await env.DB.prepare(
+    "SELECT id, url, title, source, updated_at FROM items WHERE status='pending' AND url IS NOT NULL AND updated_at < ? ORDER BY created_at LIMIT ?",
+  ).bind(cutoff, limit).all<{ id: string; url: string; title: string; source: string; updated_at: number }>();
+  const claimed = [];
+  for (const r of results) {
+    const res = await env.DB.prepare('UPDATE items SET updated_at=? WHERE id=? AND updated_at=?').bind(Date.now(), r.id, r.updated_at).run();
+    if (res.meta.changes) claimed.push(r);
+  }
+  for (let i = 0; i < claimed.length; i += 2) {
+    await Promise.allSettled(claimed.slice(i, i + 2).map((r) => readLink(env, r.id, r.url, r.title === r.source ? 'new' : 'fill')));
+  }
+}
+
+async function readLink(env: Env, id: string, url: string, mode: 'new' | 'refresh' | 'fill') {
   let s: Scraped;
   try {
     s = await scrape(url);
@@ -241,6 +279,11 @@ async function readLink(env: Env, id: string, url: string, mode: 'new' | 'refres
     await env.DB.prepare(
       `UPDATE items SET status=?, title=?, source=?, category=?, image=?, price=?, currency=?, updated_at=? WHERE id=? AND status='pending'`,
     ).bind(status, s.title, s.source, s.category, s.image, s.price, s.currency, Date.now(), id).run();
+  } else if (mode === 'fill') {
+    // Only fill in what the bookmark couldn't find; never overwrite it.
+    await env.DB.prepare(
+      `UPDATE items SET status='ready', image=COALESCE(image, ?), price=COALESCE(price, ?), updated_at=? WHERE id=?`,
+    ).bind(s.image, s.price, Date.now(), id).run();
   } else {
     // Refresh keeps the owner's edits; only fills in a newer price/photo when one was found.
     await env.DB.prepare(
@@ -251,8 +294,25 @@ async function readLink(env: Env, id: string, url: string, mode: 'new' | 'refres
 
 /* ───────────────────────── Index page ───────────────────────── */
 
-async function renderIndex(req: Request, env: Env): Promise<Response> {
-  const page = await env.ASSETS.fetch(req);
+const SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-frame-options': 'DENY',
+};
+
+function serveStatic(req: Request, url: URL): Response {
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+  const hit = STATIC[path];
+  if (!hit) return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
+  if (path === '/admin.html') return Response.redirect(new URL('/admin', url).href, 301);
+  const etag = '"' + hash(hit[0]) + '"';
+  const headers = { 'content-type': hit[1], etag, 'cache-control': hit[1].startsWith('text/html') ? 'no-cache' : 'public, max-age=300, must-revalidate', ...SECURITY_HEADERS };
+  if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers });
+  return new Response(req.method === 'HEAD' ? null : hit[0], { headers });
+}
+
+async function renderIndex(env: Env): Promise<Response> {
+  const page = new Response(STATIC['/'][0], { headers: { 'content-type': STATIC['/'][1], 'cache-control': 'no-cache', ...SECURITY_HEADERS } });
   let s = DEFAULT_SETTINGS;
   try { s = await getSettings(env); } catch { /* DB not migrated yet */ }
   const accent = ACCENTS[s.accent] || ACCENTS.blue;
@@ -274,7 +334,6 @@ async function getSettings(env: Env): Promise<Record<string, string>> {
 }
 
 const getRow = (env: Env, id: string) => env.DB.prepare('SELECT * FROM items WHERE id=?').bind(id).first<Row>();
-const touch = (env: Env, id: string) => env.DB.prepare('UPDATE items SET updated_at=? WHERE id=?').bind(Date.now(), id).run();
 const release = (env: Env, id: string) =>
   env.DB.prepare('UPDATE items SET reserved_by=NULL, reserved_at=NULL, reserve_token_hash=NULL WHERE id=?').bind(id).run();
 

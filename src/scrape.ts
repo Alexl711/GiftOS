@@ -22,7 +22,7 @@ export type Scraped = {
 export const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-type Partial = { title?: string; image?: string; price?: number; currency?: string };
+type Partial = { title?: string; image?: string; price?: number; currency?: string; weakPrice?: number };
 
 export async function scrape(url: string): Promise<Scraped> {
   const acc: Partial = {};
@@ -35,9 +35,15 @@ export async function scrape(url: string): Promise<Scraped> {
   const done = () => acc.title && acc.image && acc.price != null;
 
   const page = await fetchPage(url);
-  if (page) merge(fromHtml(page.html, page.url));
+  const fromPage = page ? fromHtml(page.html, page.url) : {};
+  merge(fromPage);
   if (!done()) merge(await fromShopify(page?.url || url, page?.html || ''));
-  if (!done()) merge(await fromMicrolink(url));
+  // Microlink only helps with title + photo, so skip it when the photo is already known.
+  let ml: Partial = {};
+  if (!acc.image) { ml = await fromMicrolink(url); merge(ml); }
+  console.log(JSON.stringify({ scrape: url, page: page ? 'ok' : 'blocked', microlink: acc.image && !fromPageImage(page) ? 'used' : 'no', found: { title: !!acc.title, image: !!acc.image, price: acc.price != null || fromPageWeak(page) } }));
+  // Loosely matched "price" fields are a last resort (they can be in cents or belong to another product).
+  if (acc.price == null && fromPage.weakPrice != null) acc.price = fromPage.weakPrice;
 
   const title = tidyTitle(acc.title || '') || slugTitle(url) || hostOf(url);
   return {
@@ -50,6 +56,9 @@ export async function scrape(url: string): Promise<Scraped> {
     found: { title: !!acc.title, image: !!acc.image, price: acc.price != null },
   };
 }
+
+const fromPageImage = (p: { html: string; url: string } | null) => !!(p && fromHtml(p.html, p.url).image);
+const fromPageWeak = (p: { html: string; url: string } | null) => !!(p && fromHtml(p.html, p.url).weakPrice != null);
 
 /* ───────────── 1. The page ───────────── */
 
@@ -68,7 +77,7 @@ async function fetchPage(url: string): Promise<{ html: string; url: string } | n
       redirect: 'follow',
       signal: AbortSignal.timeout(9000),
     });
-    if (!r.ok || !(r.headers.get('content-type') || '').includes('html')) return null;
+    if (!r.ok || !(r.headers.get('content-type') || '').includes('html')) { console.log(JSON.stringify({ fetch: url, status: r.status })); return null; }
     const html = (await r.text()).slice(0, 3_000_000);
     if (/captcha|robot check|are you a human|access denied/i.test(html.slice(0, 20000)) && !/og:image/i.test(html)) return null;
     return { html, url: r.url || url };
@@ -96,9 +105,10 @@ export function fromHtml(html: string, base: string): Partial {
 
   const priceStr = ld.price ?? meta['product:price:amount'] ?? meta['og:price:amount'] ?? meta['price'] ??
     meta['twitter:data1'] ??
-    (html.match(/class=["']a-offscreen["'][^>]*>\s*[^\d<]{0,4}([\d.,]+)/) || [])[1] ??           // Amazon
-    (html.match(/"(?:price|salePrice|currentPrice|finalPrice)"\s*:\s*\{?[^}]{0,40}?"?(\d{1,6}(?:\.\d{1,2})?)"?/) || [])[1];
+    (html.match(/class=["']a-offscreen["'][^>]*>\s*[^\d<]{0,4}([\d.,]+)/) || [])[1];           // Amazon
   out.price = parsePrice(priceStr);
+  // Weak guess: a decimal "price" in embedded JSON (decimals only, so cents values like 9800 are skipped).
+  out.weakPrice = parsePrice((html.match(/"(?:price|salePrice|currentPrice|finalPrice)"\s*:\s*"?(\d{1,6}\.\d{2})"?/) || [])[1]);
   out.currency = ld.currency || meta['product:price:currency'] || meta['og:price:currency'] || meta['pricecurrency'] ||
     (html.match(/"priceCurrency"\s*:\s*"([A-Z]{3})"/) || [])[1];
   return out;
@@ -174,7 +184,7 @@ async function fromShopify(url: string, html: string): Promise<Partial> {
   let u: URL;
   try { u = new URL(url); } catch { return {}; }
   const m = u.pathname.match(/\/products\/([^/?#]+)/);
-  if (!m || (html && !/shopify/i.test(html) && !/\/products\//.test(u.pathname))) return {};
+  if (!m) return {};
   try {
     const r = await fetch(`${u.origin}/products/${m[1]}.js`, { headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(6000) });
     if (!r.ok) return {};
@@ -191,10 +201,23 @@ async function fromShopify(url: string, html: string): Promise<Partial> {
 
 /* ───────────── 3. Microlink ───────────── */
 
-async function fromMicrolink(url: string): Promise<Partial> {
+// Microlink's free tier allows 2 requests at a time, so calls are queued one by one.
+let microlinkQueue: Promise<unknown> = Promise.resolve();
+function fromMicrolink(url: string): Promise<Partial> {
+  const run = microlinkQueue.then(() => microlinkOnce(url), () => microlinkOnce(url));
+  microlinkQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function microlinkOnce(url: string): Promise<Partial> {
   try {
-    const r = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(9000) });
-    if (!r.ok) return {};
+    let r: Response | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      r = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) });
+      if (r.status !== 429) break;
+      await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+    }
+    if (!r || !r.ok) { console.log(JSON.stringify({ microlink: url, status: r?.status })); return {}; }
     // deno-lint-ignore no-explicit-any
     const j: any = await r.json();
     if (j.status !== 'success') return {};

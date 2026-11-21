@@ -122,3 +122,11 @@
 .edit-preview .thumb{width:72px;height:72px;border-radius:16px}
 .edit-preview .meta{min-width:0;font-size:13px;color:var(--ink-2)}
 .edit-preview .meta a{color:var(--accent);display:inline-flex;align-items:center;gap:3px}
+
+/* bookmark button dialog */
+.clip-drag{display:flex;align-items:center;gap:14px;padding:16px;border-radius:18px;background:var(--tile);margin-bottom:12px;flex-wrap:wrap}
+.clip-drag span{font-size:13px;color:var(--ink-2);flex:1;min-width:160px}
+.clip-drag .btn{cursor:grab}
+.clip-phone{border-radius:16px;border:1px solid var(--line);padding:12px 14px}
+.clip-phone summary{cursor:pointer;font-size:14px;font-weight:550}
+.clip-phone ol{margin:10px 0 12px 18px;font-size:14px;color:var(--ink-2);display:grid;gap:4px}
