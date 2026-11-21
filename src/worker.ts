@@ -53,8 +53,10 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   event_name: '',
   event_date: '',
   accent: 'blue',
+  budget: '',
+  budget_note: '',
 };
-const SETTING_LIMITS: Record<string, number> = { name: 40, title: 80, tagline: 120, message: 400, event_name: 40, event_date: 10, accent: 12 };
+const SETTING_LIMITS: Record<string, number> = { name: 40, title: 80, tagline: 120, message: 400, event_name: 40, event_date: 10, accent: 12, budget: 8, budget_note: 300 };
 
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -250,6 +252,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
         let v = String(body[k]).trim().slice(0, SETTING_LIMITS[k]);
         if (k === 'accent' && !(v in ACCENTS)) v = 'blue';
         if (k === 'event_date' && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) v = '';
+        if (k === 'budget') { const n = parsePrice(v); v = n ? String(Math.round(n)) : ''; }
         return env.DB.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k, v);
       });
       if (stmts.length) await env.DB.batch(stmts);

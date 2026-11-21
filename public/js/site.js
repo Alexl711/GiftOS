@@ -4,6 +4,45 @@
 const S = { settings: {}, items: [], query: '', budget: store.get('giftos_budget', 'low'), loaded: false };
 const BUDGETS = { low: [0, 50], mid: [50, 150], high: [150, Infinity] };
 
+/* ───── Secret Santa budget ───── */
+// "Give or take": items up to 15% over the budget still count.
+const budgetAmount = () => { const n = Number(S.settings.budget); return n > 0 ? n : null; };
+const budgetLimit = () => budgetAmount() && budgetAmount() * 1.15;
+const budgetKey = () => 'giftos_budgetmode_' + budgetAmount();
+const budgetMode = () => (budgetAmount() ? store.get(budgetKey(), null) : null);
+const fitsBudget = (i) => i.price == null || i.price <= budgetLimit();
+function budgetMessage() {
+  const b = budgetAmount();
+  return (S.settings.budget_note || '').trim() ||
+    `Our gift budget is about $${b}, give or take. Some things on here cost more because this is my everyday wishlist too, so please skip those. Anything around the budget would make my day!`;
+}
+function maybeShowBudgetPopup() {
+  if (!budgetAmount() || budgetMode()) return;
+  $('#budgetMsg').textContent = budgetMessage();
+  $('#budgetOnly').textContent = `Show gifts around $${budgetAmount()}`;
+  setTimeout(() => openDialog($('#budgetDlg')), 600);
+}
+function setBudgetMode(mode) {
+  store.set(budgetKey(), mode);
+  closeDialog($('#budgetDlg'));
+  renderSections();
+  if (mode === 'budget') toast(`Showing gifts up to about $${budgetAmount()}`, 'ok');
+}
+function budgetBanner(hidden) {
+  const b = budgetAmount();
+  if (!b) return null;
+  if (budgetMode() === 'budget') {
+    return h('div', { class: 'budget-banner reveal' },
+      h('span', { class: 'bb-ic' }, icon('gift', 16)),
+      h('span', { class: 'bb-text' }, h('b', { text: `Gifts around $${b}` }), hidden ? ` · ${hidden} pricier item${hidden === 1 ? '' : 's'} hidden` : ''),
+      h('button', { class: 'btn ghost sm', type: 'button', onclick: () => setBudgetMode('all') }, 'See everything'));
+  }
+  return h('div', { class: 'budget-banner soft reveal' },
+    h('span', { class: 'bb-ic' }, icon('gift', 16)),
+    h('span', { class: 'bb-text' }, h('b', { text: 'Secret Santa?' }), ` The budget is about $${b}.`),
+    h('button', { class: 'btn ghost sm', type: 'button', onclick: () => setBudgetMode('budget') }, `Only show ~$${b}`));
+}
+
 const mine = () => store.get('giftos_reservations', {});
 const setMine = (id, token) => { const r = mine(); if (token) r[id] = token; else delete r[id]; store.set('giftos_reservations', r); };
 
@@ -17,6 +56,7 @@ async function load(quiet) {
     for (const id of Object.keys(r)) { const it = S.items.find((i) => i.id === id); if (!it || !it.reserved) { delete r[id]; changed = true; } }
     if (changed) store.set('giftos_reservations', r);
     renderHero(); renderSections();
+    maybeShowBudgetPopup();
   } catch (e) {
     if (!quiet) toast(e.message, 'err');
     if (!S.loaded) $('#sections').replaceChildren(emptyState('Couldn’t load the list', 'Check your connection and refresh the page.'));
@@ -60,11 +100,14 @@ function daysUntil(iso) {
 function renderSections() {
   const root = $('#sections');
   const q = S.query.trim().toLowerCase();
-  const items = S.items;
+  const inBudget = budgetMode() === 'budget';
+  const items = inBudget ? S.items.filter(fitsBudget) : S.items;
   const out = [];
   const pills = [];
+  const banner = budgetBanner(S.items.length - items.length);
+  if (banner) out.push(banner);
 
-  if (!items.length) {
+  if (!S.items.length) {
     root.replaceChildren(emptyState('The list is being put together', 'Check back soon. New things are on the way.', 'gift'));
     $('#jumpPills').replaceChildren(); return;
   }
@@ -88,7 +131,7 @@ function renderSections() {
 
   // Suggestions by budget: only things still available.
   const avail = linked.filter((i) => !i.reserved && i.price != null);
-  if (avail.length >= 3) {
+  if (avail.length >= 3 && !inBudget) {
     const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Budget' },
       h('button', { type: 'button', 'data-v': 'low' }, 'Under $50'),
       h('button', { type: 'button', 'data-v': 'mid' }, '$50–150'),
@@ -324,4 +367,6 @@ const nav = $('#nav');
 addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 4), { passive: true });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.loaded) load(true); });
 reveal();
+$('#budgetOnly').addEventListener('click', () => setBudgetMode('budget'));
+$('#budgetAll').addEventListener('click', () => setBudgetMode('all'));
 load();

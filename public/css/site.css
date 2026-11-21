@@ -164,3 +164,20 @@
 .foot-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:22px;padding-bottom:calc(30px + env(safe-area-inset-bottom));font-size:13px;color:var(--ink-3)}
 .foot-brand{display:inline-flex;align-items:center;gap:8px}
 .foot-link:hover{color:var(--ink)}
+
+/* ───── Secret Santa budget ───── */
+.budget-dlg{width:min(420px,100%)}
+.budget-dlg .card-sheet{text-align:center;padding:28px 24px 22px}
+.santa{font-size:44px;line-height:1;margin-bottom:12px;animation:wave 1.6s var(--ease) .3s both}
+@keyframes wave{0%{transform:scale(.6) rotate(-12deg);opacity:0}40%{transform:scale(1.1) rotate(8deg);opacity:1}70%{transform:rotate(-4deg)}100%{transform:none}}
+.budget-dlg h2{font-family:var(--display);font-size:24px;font-weight:650;letter-spacing:-.03em;margin-bottom:10px}
+.budget-msg{font-size:15px;color:var(--ink-2);line-height:1.55;margin:0 auto 22px;max-width:34ch;text-wrap:pretty}
+.budget-actions{display:flex;flex-direction:column;gap:8px}
+.budget-actions .btn{width:100%}
+.budget-banner{display:flex;align-items:center;gap:12px;margin-top:24px;padding:10px 10px 10px 14px;border-radius:18px;background:var(--accent-soft);color:var(--ink);font-size:14px}
+.budget-banner.soft{background:var(--tile)}
+.budget-banner .bb-ic{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:var(--surface);color:var(--accent);flex:0 0 auto;box-shadow:var(--shadow-sm)}
+.budget-banner .bb-text{flex:1;min-width:0;color:var(--ink-2)}
+.budget-banner .bb-text b{color:var(--ink);font-weight:600}
+.budget-banner .btn{flex:0 0 auto;background:var(--surface)}
+@media(max-width:480px){.budget-banner{flex-wrap:wrap}.budget-banner .btn{width:100%}}

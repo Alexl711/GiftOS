@@ -94,6 +94,13 @@
             <label class="field"><span>Occasion</span><input class="input" id="sEvent" maxlength="40" placeholder="Birthday"></label>
             <label class="field"><span>Date</span><input class="input" id="sDate" type="date"></label>
           </div>
+          <div class="budget-box">
+            <label class="field"><span>Gift budget (optional)</span>
+              <span class="money"><span aria-hidden="true">$</span><input class="input" id="sBudget" inputmode="numeric" maxlength="6" placeholder="125"></span>
+            </label>
+            <label class="field"><span>Budget message</span><textarea class="input" id="sBudgetNote" rows="3" maxlength="300" placeholder="Leave blank for a friendly default message"></textarea></label>
+            <p class="fine-note">Gift-givers see this in a pop-up the first time they visit, with an option to only show gifts around this price. Clear the budget to turn it off.</p>
+          </div>
           <div class="field"><span>Make it yours</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Accent color"></div></div>
           <label class="switch-row">
             <span><b>Surprise mode</b><small>Hide who reserved what from you.</small></span>

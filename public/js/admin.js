@@ -266,6 +266,7 @@ function fillSettings() {
   const s = A.settings;
   $('#sName').value = s.name || ''; $('#sTitle').value = s.title || ''; $('#sTagline').value = s.tagline || '';
   $('#sMessage').value = s.message || ''; $('#sEvent').value = s.event_name || ''; $('#sDate').value = s.event_date || '';
+  $('#sBudget').value = s.budget || ''; $('#sBudgetNote').value = s.budget_note || '';
   $('#logoMark').textContent = (s.name || 'G').charAt(0).toUpperCase();
   const sw = $('#swatches');
   if (!sw.children.length) {
@@ -283,7 +284,8 @@ $('#settingsForm').addEventListener('submit', async (e) => {
   try {
     const { settings } = await api('/api/admin/settings', { method: 'PUT', body: {
       name: $('#sName').value, title: $('#sTitle').value, tagline: $('#sTagline').value, message: $('#sMessage').value,
-      event_name: $('#sEvent').value, event_date: $('#sDate').value, accent: A.settings.accent || 'blue' } });
+      event_name: $('#sEvent').value, event_date: $('#sDate').value, accent: A.settings.accent || 'blue',
+      budget: $('#sBudget').value, budget_note: $('#sBudgetNote').value } });
     A.settings = settings; settingsDirty = false; fillSettings(); toast('Your page is updated', 'ok');
   } catch (err) { toast(err.message, 'err'); }
   finally { busy(btn, false); }
