@@ -179,8 +179,13 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
         // Already on the list: fill in a missing photo or price, never overwrite what's there.
         const img = isHttp(String(b.image || '').trim()) ? String(b.image).trim().slice(0, 2000) : null;
         const pr = parsePrice(b.price) ?? null;
-        await env.DB.prepare(`UPDATE items SET image=COALESCE(image, ?), price=COALESCE(price, ?), status='ready', updated_at=? WHERE id=?`)
-          .bind(img, pr, Date.now(), dupe.id).run();
+        const t = tidyTitle(String(b.title || ''));
+        await env.DB.prepare(
+          `UPDATE items SET image=COALESCE(image, ?), price=COALESCE(price, ?),
+             title=CASE WHEN (title=source OR title=?) AND ? != '' THEN ? ELSE title END,
+             category=CASE WHEN category='Other' AND ? != '' THEN ? ELSE category END,
+             status='ready', updated_at=? WHERE id=?`,
+        ).bind(img, pr, hostOf(link), t, t, t, guessCategory(`${t} ${link}`), Date.now(), dupe.id).run();
         return json({ item: ownerItem((await getRow(env, dupe.id))!), updated: true });
       }
       const title = tidyTitle(String(b.title || '')) || hostOf(link);
