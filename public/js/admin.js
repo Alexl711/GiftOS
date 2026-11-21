@@ -332,7 +332,8 @@ function bookmarkletCode() {
     var li=q('#landingImage');if(li&&!d.image)d.image=li.getAttribute('data-old-hires')||li.src;
     var ap=q('.a-price .a-offscreen,#corePrice_feature_div .a-offscreen');if(ap&&!d.price)d.price=ap.textContent;
     if(d.image)try{d.image=new URL(d.image,location.href).href}catch(e){}
-    window.open('${location.origin}/admin#clip='+encodeURIComponent(JSON.stringify(d)),'_blank');
+    var to='${location.origin}/admin#clip='+encodeURIComponent(JSON.stringify(d));
+    var w=window.open(to,'_blank');if(!w)location.href=to;
   })()`;
   return 'javascript:' + src.replace(/\n\s*/g, '');
 }
