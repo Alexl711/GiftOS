@@ -76,6 +76,7 @@ export default {
 
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+    if (url.hostname.startsWith('www.')) { url.hostname = url.hostname.slice(4); return Response.redirect(url.href, 301); }
     if (url.pathname === '/' || url.pathname === '/index.html') return renderIndex(env);
     if (!url.pathname.startsWith('/api/')) return serveStatic(req, url);
     try {

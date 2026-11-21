@@ -12,6 +12,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  "routes": [
+    { "pattern": "alexwishlist.com", "custom_domain": true },
+    { "pattern": "www.alexwishlist.com", "custom_domain": true }
+  ],
   "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true }
 }
