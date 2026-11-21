@@ -4,41 +4,18 @@
 const S = { settings: {}, items: [], query: '', budget: store.get('giftos_budget', 'low'), loaded: false };
 const BUDGETS = { low: [0, 50], mid: [50, 150], high: [150, Infinity] };
 
-/* ───── Secret Santa budget ─────
-   The server only says whether a budget is on and which items fit it ("give or take" included);
-   the amount itself is never shown or sent. */
+/* ───── Secret Santa note ─────
+   A friendly one-time pop-up when a budget is set in admin. No filtering, and the amount is never shown. */
 const budgetOn = () => !!S.settings.budget_on;
-const budgetKey = () => 'giftos_budgetmode_v2';
-const budgetMode = () => (budgetOn() ? store.get(budgetKey(), null) : null);
-const fitsBudget = (i) => i.inBudget !== false;
+const budgetSeenKey = 'giftos_budget_note_seen';
 function budgetMessage() {
   return (S.settings.budget_note || '').trim() ||
     'Some things on here are pricier because this is my everyday wishlist too, so feel free to skip those. Anything that fits our Secret Santa budget would make my day!';
 }
 function maybeShowBudgetPopup() {
-  if (!budgetOn() || budgetMode()) return;
+  if (!budgetOn() || store.get(budgetSeenKey, false)) return;
   $('#budgetMsg').textContent = budgetMessage();
-  $('#budgetOnly').textContent = 'Show gifts in our budget';
   setTimeout(() => openDialog($('#budgetDlg')), 600);
-}
-function setBudgetMode(mode) {
-  store.set(budgetKey(), mode);
-  closeDialog($('#budgetDlg'));
-  renderSections();
-  if (mode === 'budget') toast('Showing gifts in our budget', 'ok');
-}
-function budgetBanner(hidden) {
-  if (!budgetOn()) return null;
-  if (budgetMode() === 'budget') {
-    return h('div', { class: 'budget-banner reveal' },
-      h('span', { class: 'bb-ic' }, icon('gift', 16)),
-      h('span', { class: 'bb-text' }, h('b', { text: 'Gifts in our budget' }), hidden ? ` · ${hidden} pricier item${hidden === 1 ? '' : 's'} hidden` : ''),
-      h('button', { class: 'btn ghost sm', type: 'button', onclick: () => setBudgetMode('all') }, 'See everything'));
-  }
-  return h('div', { class: 'budget-banner soft reveal' },
-    h('span', { class: 'bb-ic' }, icon('gift', 16)),
-    h('span', { class: 'bb-text' }, h('b', { text: 'Secret Santa?' }), ' Some items are above our budget.'),
-    h('button', { class: 'btn ghost sm', type: 'button', onclick: () => setBudgetMode('budget') }, 'Show in-budget gifts'));
 }
 
 const mine = () => store.get('giftos_reservations', {});
@@ -98,14 +75,11 @@ function daysUntil(iso) {
 function renderSections() {
   const root = $('#sections');
   const q = S.query.trim().toLowerCase();
-  const inBudget = budgetMode() === 'budget';
-  const items = inBudget ? S.items.filter(fitsBudget) : S.items;
+  const items = S.items;
   const out = [];
   const pills = [];
-  const banner = budgetBanner(S.items.length - items.length);
-  if (banner) out.push(banner);
 
-  if (!S.items.length) {
+  if (!items.length) {
     root.replaceChildren(emptyState('The list is being put together', 'Check back soon. New things are on the way.', 'gift'));
     $('#jumpPills').replaceChildren(); return;
   }
@@ -129,7 +103,7 @@ function renderSections() {
 
   // Suggestions by budget: only things still available.
   const avail = linked.filter((i) => !i.reserved && i.price != null);
-  if (avail.length >= 3 && !inBudget) {
+  if (avail.length >= 3) {
     const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Budget' },
       h('button', { type: 'button', 'data-v': 'low' }, 'Under $50'),
       h('button', { type: 'button', 'data-v': 'mid' }, '$50–150'),
@@ -365,6 +339,7 @@ const nav = $('#nav');
 addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 4), { passive: true });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.loaded) load(true); });
 reveal();
-$('#budgetOnly').addEventListener('click', () => setBudgetMode('budget'));
-$('#budgetAll').addEventListener('click', () => setBudgetMode('all'));
+$('#budgetOk').addEventListener('click', () => closeDialog($('#budgetDlg')));
+// However it's closed (button, Esc, tapping outside), don't show it again on this device.
+$('#budgetDlg').addEventListener('close', () => store.set(budgetSeenKey, true));
 load();

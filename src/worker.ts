@@ -103,9 +103,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
   /* ── public ── */
   if (p === '/api/list' && m === 'GET') {
     const { results } = await env.DB.prepare("SELECT * FROM items WHERE status != 'pending' OR url IS NULL ORDER BY created_at DESC").all<Row>();
-    const settings = await getSettings(env);
-    const limit = budgetLimit(settings);
-    return json({ settings: publicSettings(settings), items: results.map((r) => publicItem(r, limit)) });
+    return json({ settings: publicSettings(await getSettings(env)), items: results.map((r) => publicItem(r)) });
   }
 
   let mm = p.match(/^\/api\/items\/([\w-]{8,64})\/reserve$/);
@@ -119,7 +117,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
     if (!res.meta.changes) {
       throw (await getRow(env, mm[1])) ? new HttpError(409, 'Someone just reserved this one.') : new HttpError(404, 'That item is no longer on the list.');
     }
-    return json({ token, item: publicItem((await getRow(env, mm[1]))!, budgetLimit(await getSettings(env))) });
+    return json({ token, item: publicItem((await getRow(env, mm[1]))!) });
   }
   if (mm && m === 'DELETE') {
     const row = await getRow(env, mm[1]);
@@ -129,7 +127,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL): P
       throw new HttpError(403, 'Only the person who reserved this can release it.');
     }
     await release(env, row.id);
-    return json({ item: publicItem((await getRow(env, row.id))!, budgetLimit(await getSettings(env))) });
+    return json({ item: publicItem((await getRow(env, row.id))!) });
   }
 
   mm = p.match(/^\/api\/img\/([\w-]{8,64})$/);
@@ -358,20 +356,12 @@ const release = (env: Env, id: string) =>
 const imgPath = (r: Row) => (r.image ? `/api/img/${r.id}?v=${hash(r.image)}` : null);
 
 /** What visitors see. Who reserved something is never sent to the public. */
-function publicItem(r: Row, budgetMax: number | null = null) {
+function publicItem(r: Row) {
   return {
     id: r.id, title: r.title, url: r.url, source: r.source, category: r.category, image: imgPath(r), imageDirect: r.image,
     price: r.price, currency: r.currency, notes: r.notes, starred: !!r.starred, createdAt: r.created_at,
     reserved: r.reserved_at != null,
-    // Whether it fits the gift budget. The budget amount itself is never sent to visitors.
-    inBudget: budgetMax == null || r.price == null || r.price <= budgetMax,
   };
-}
-
-/** Budget plus "give or take" (15%), or null when no budget is set. */
-function budgetLimit(s: Record<string, string>): number | null {
-  const n = Number(s.budget);
-  return n > 0 ? n * 1.15 : null;
 }
 
 /** Settings as visitors see them: the budget amount is replaced by an on/off flag. */
